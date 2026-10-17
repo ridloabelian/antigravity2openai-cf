@@ -14,7 +14,7 @@ workers_dev = true
 # simulator even with a placeholder preview_id.
 [[kv_namespaces]]
 binding = "ANTIGRAVITY_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "58ce13a276ff48bab5e5eef607681fdb"
 preview_id = "local_antigravity_kv_preview"
 
 # ============================================================================
