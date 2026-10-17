@@ -1,0 +1,37 @@
+name = "antigravity2openai-cf"
+main = "src/index.ts"
+compatibility_date = "2025-02-04"
+workers_dev = true
+
+# ============================================================================
+# 1. KV Namespace Binding (REQUIRED)
+# ============================================================================
+# Run the following command to create your KV namespace:
+#   npx wrangler kv namespace create ANTIGRAVITY_KV
+#
+# Then replace `id` below with the generated KV namespace ID.
+# For local development (`npx wrangler dev`), Wrangler automatically uses a local
+# simulator even with a placeholder preview_id.
+[[kv_namespaces]]
+binding = "ANTIGRAVITY_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+preview_id = "local_antigravity_kv_preview"
+
+# ============================================================================
+# 2. Environment Variables (Optional Overrides)
+# ============================================================================
+[vars]
+# Default fallback Google Cloud Project ID if auto-discovery via loadCodeAssist
+# does not return a project for the account.
+DEFAULT_PROJECT_ID = "rising-fact-p41fc"
+
+# ============================================================================
+# 3. Secrets (Set via CLI for Production, or in `.dev.vars` for Local Dev)
+# ============================================================================
+# Do NOT hardcode secrets here in production! Instead, run:
+#   npx wrangler secret put API_KEY
+#   npx wrangler secret put ADMIN_PASSWORD
+#
+# Optional OAuth client overrides:
+#   npx wrangler secret put GOOGLE_CLIENT_ID
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
