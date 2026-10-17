@@ -49,10 +49,6 @@ export function buildAntigravityHeaders(options: {
     }),
   };
 
-  if (options.projectId) {
-    headers["x-goog-user-project"] = options.projectId;
-  }
-
   if (options.stream) {
     headers["Accept"] = "text/event-stream";
   } else {
@@ -76,60 +72,74 @@ export async function sendAntigravityRequest(
 ): Promise<Response> {
   let tokenInfo = await getValidAccessToken(env, false);
 
-  // Inject discovered projectId into the envelope if not already set
-  const activeProjectId = envelope.project || tokenInfo.projectId;
-  const payload: AntigravityEnvelope = {
-    ...envelope,
-    project: activeProjectId,
-  };
+  const fallbackProjectId = env.DEFAULT_PROJECT_ID || "rising-fact-p41fc";
+  // Avoid "aicode-consumers" placeholder project which lacks serviceUsageConsumer permission
+  const rawProjectId = envelope.project || tokenInfo.projectId || fallbackProjectId;
+  const primaryProjectId =
+    rawProjectId === "aicode-consumers" ? fallbackProjectId : rawProjectId;
+
+  const projectCandidates = Array.from(
+    new Set([primaryProjectId, fallbackProjectId])
+  );
 
   const actionPath = stream
     ? "/v1internal:streamGenerateContent?alt=sse"
     : "/v1internal:generateContent";
 
-  const bodyStr = JSON.stringify(payload);
   let lastResponse: Response | null = null;
   let hasRetried401 = false;
 
-  for (let i = 0; i < ANTIGRAVITY_ENDPOINTS.length; i++) {
-    const baseUrl = ANTIGRAVITY_ENDPOINTS[i]!;
-    const url = `${baseUrl}${actionPath}`;
+  for (const activeProjectId of projectCandidates) {
+    const payload: AntigravityEnvelope = {
+      ...envelope,
+      project: activeProjectId,
+    };
+    const bodyStr = JSON.stringify(payload);
 
-    const headers = buildAntigravityHeaders({
-      accessToken: tokenInfo.accessToken,
-      projectId: activeProjectId,
-      wireModelId: payload.model,
-      stream,
-      env,
-    });
+    for (let i = 0; i < ANTIGRAVITY_ENDPOINTS.length; i++) {
+      const baseUrl = ANTIGRAVITY_ENDPOINTS[i]!;
+      const url = `${baseUrl}${actionPath}`;
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: bodyStr,
-    });
+      const headers = buildAntigravityHeaders({
+        accessToken: tokenInfo.accessToken,
+        projectId: activeProjectId,
+        wireModelId: payload.model,
+        stream,
+        env,
+      });
 
-    if (response.ok) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: bodyStr,
+      });
+
+      if (response.ok) {
+        return response;
+      }
+
+      // If 401 Unauthorized, force-refresh token once and retry the same endpoint
+      if (response.status === 401 && !hasRetried401) {
+        hasRetried401 = true;
+        tokenInfo = await getValidAccessToken(env, true);
+        i--; // Retry current endpoint index with new token
+        continue;
+      }
+
+      lastResponse = response;
+
+      // If 403, 404, or 5xx transient error, try next endpoint / project candidate
+      if (
+        response.status === 403 ||
+        response.status === 404 ||
+        response.status >= 500
+      ) {
+        continue;
+      }
+
+      // For 400 (bad request) or 429 (rate limit), return immediately
       return response;
     }
-
-    // If 401 Unauthorized, force-refresh token once and retry the same endpoint
-    if (response.status === 401 && !hasRetried401) {
-      hasRetried401 = true;
-      tokenInfo = await getValidAccessToken(env, true);
-      i--; // Retry current endpoint index with new token
-      continue;
-    }
-
-    lastResponse = response;
-
-    // If 404 (e.g. model only available on Daily or Prod) or 5xx transient error, try next endpoint
-    if (response.status === 404 || response.status >= 500) {
-      continue;
-    }
-
-    // For 400 (bad request) or 429 (rate limit), return immediately without burning extra calls
-    return response;
   }
 
   if (lastResponse) {
@@ -151,9 +161,6 @@ export async function fetchDiscoveredAntigravityModels(env: Env): Promise<string
       Accept: "application/json",
       "User-Agent": ANTIGRAVITY_CLI_UA,
     };
-    if (tokenInfo.projectId) {
-      headers["x-goog-user-project"] = tokenInfo.projectId;
-    }
 
     for (const baseUrl of ANTIGRAVITY_ENDPOINTS) {
       const res = await fetch(`${baseUrl}/v1internal:fetchAvailableModels`, {

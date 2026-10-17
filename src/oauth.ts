@@ -215,11 +215,14 @@ function extractProjectIdFromResponse(data: Record<string, unknown> | null | und
   if (!data || typeof data !== "object") return undefined;
   for (const key of ["cloudaicompanionProject", "projectId", "project"]) {
     const val = data[key];
-    if (typeof val === "string" && val.trim().length > 0) {
+    if (typeof val === "string" && val.trim().length > 0 && val.trim() !== "aicode-consumers") {
       return val.trim();
     }
     if (val && typeof val === "object" && typeof (val as { id?: unknown }).id === "string") {
-      return (val as { id: string }).id.trim();
+      const id = (val as { id: string }).id.trim();
+      if (id.length > 0 && id !== "aicode-consumers") {
+        return id;
+      }
     }
   }
   return undefined;
@@ -230,9 +233,9 @@ function extractProjectIdFromResponse(data: Record<string, unknown> | null | und
  */
 export async function discoverAntigravityProject(accessToken: string, env?: Env): Promise<string> {
   const endpoints = [
-    "https://cloudcode-pa.googleapis.com",
     "https://daily-cloudcode-pa.sandbox.googleapis.com",
     "https://daily-cloudcode-pa.googleapis.com",
+    "https://cloudcode-pa.googleapis.com",
   ];
 
   const headers = {
@@ -448,11 +451,11 @@ export async function refreshAccessToken(
       : 3600;
   const expiresAtMs = Date.now() + expiresInSec * 1000;
 
-  // If project_id is missing or still using fallback, try discovering it once on refresh
+  // If project_id is missing or still using fallback/placeholder, try discovering it once on refresh
   let projectId = currentState.project_id;
-  if (!projectId || projectId === DEFAULT_FALLBACK_PROJECT_ID) {
+  if (!projectId || projectId === DEFAULT_FALLBACK_PROJECT_ID || projectId === "aicode-consumers") {
     projectId = await discoverAntigravityProject(tokenData.access_token, env).catch(
-      () => currentState.project_id || DEFAULT_FALLBACK_PROJECT_ID,
+      () => DEFAULT_FALLBACK_PROJECT_ID,
     );
   }
 
